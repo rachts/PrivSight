@@ -1,0 +1,167 @@
+"""
+Webcam capture and frame handling with performance optimization.
+"""
+
+import asyncio
+import logging
+from typing import Optional, List
+from threading import Thread, Lock
+
+import cv2
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+class WebcamHandler:
+    """Handle webcam capture and frame processing."""
+
+    def __init__(self, camera_index: int = 0, frame_skip: int = 3, target_size: tuple = (320, 240)):
+        """
+        Initialize webcam handler.
+
+        Args:
+            camera_index: Camera device index (0 for default)
+            frame_skip: Process every Nth frame for performance
+            target_size: Resize frames to this size for faster processing
+        """
+        self.camera_index = camera_index
+        self.frame_skip = frame_skip
+        self.target_size = target_size
+
+        self.cap = None
+        self.current_frame: Optional[np.ndarray] = None
+        self.frame_lock = Lock()
+        self.running = False
+        self.frame_count = 0
+
+        self._init_camera()
+
+    def _init_camera(self) -> None:
+        """Initialize camera capture."""
+        try:
+            self.cap = cv2.VideoCapture(self.camera_index)
+            if not self.cap.isOpened():
+                logger.error("[Webcam] Failed to open camera")
+                return
+
+            # Set camera properties
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+            logger.info("[Webcam] Camera initialized successfully")
+            self._start_capture_thread()
+
+        except Exception as e:
+            logger.error(f"[Webcam] Error initializing camera: {e}")
+
+    def _start_capture_thread(self) -> None:
+        """Start background thread for continuous frame capture."""
+        self.running = True
+        capture_thread = Thread(target=self._capture_loop, daemon=True)
+        capture_thread.start()
+        logger.info("[Webcam] Capture thread started")
+
+    def _capture_loop(self) -> None:
+        """Continuous frame capture loop running in background thread."""
+        while self.running and self.cap:
+            try:
+                ret, frame = self.cap.read()
+                if ret:
+                    self.frame_count += 1
+                    with self.frame_lock:
+                        self.current_frame = frame
+                else:
+                    logger.warning("[Webcam] Failed to read frame")
+            except Exception as e:
+                logger.error(f"[Webcam] Error in capture loop: {e}")
+
+    def get_frame(self) -> Optional[np.ndarray]:
+        """
+        Get current frame, resized for processing.
+
+        Returns:
+            Resized frame or None if unavailable
+        """
+        with self.frame_lock:
+            if self.current_frame is None:
+                return None
+
+            # Skip frames for performance
+            if self.frame_count % self.frame_skip != 0:
+                return None
+
+            # Resize for faster processing
+            resized = cv2.resize(self.current_frame, self.target_size)
+            return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+
+    def get_frame_raw(self) -> Optional[np.ndarray]:
+        """Get current frame without resizing."""
+        with self.frame_lock:
+            if self.current_frame is None:
+                return None
+            return cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+
+    async def capture_frames(self, num_frames: int = 5) -> List[np.ndarray]:
+        """
+        Capture N frames for face registration.
+
+        Args:
+            num_frames: Number of frames to capture
+
+        Returns:
+            List of captured frames in RGB format
+        """
+        logger.info(f"[Webcam] Capturing {num_frames} frames for registration")
+        captured = []
+        frame_interval = 0.2  # 200ms between captures
+
+        for i in range(num_frames):
+            frame = self.get_frame_raw()
+            if frame is not None:
+                captured.append(frame)
+                logger.debug(f"[Webcam] Captured frame {i+1}/{num_frames}")
+            else:
+                logger.warning(f"[Webcam] Failed to capture frame {i+1}")
+
+            await asyncio.sleep(frame_interval)
+
+        if len(captured) < num_frames:
+            logger.warning(f"[Webcam] Only captured {len(captured)}/{num_frames} frames")
+
+        return captured
+
+    def release(self) -> None:
+        """Release camera resources."""
+        self.running = False
+        if self.cap:
+            self.cap.release()
+            logger.info("[Webcam] Camera released")
+
+
+class MockWebcamHandler(WebcamHandler):
+    """Mock webcam for testing without physical camera."""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize mock webcam with test frame."""
+        self.target_size = kwargs.get('target_size', (320, 240))
+        self.current_frame = np.random.randint(0, 256, (*self.target_size, 3), dtype=np.uint8)
+        self.frame_lock = Lock()
+        self.running = True
+        self.frame_count = 0
+        logger.info("[Webcam] Mock webcam initialized")
+
+    def _init_camera(self) -> None:
+        """Skip camera initialization for mock."""
+        pass
+
+    def _start_capture_thread(self) -> None:
+        """Skip thread start for mock."""
+        pass
+
+    def release(self) -> None:
+        """Release mock resources."""
+        self.running = False
+        logger.info("[Webcam] Mock webcam released")

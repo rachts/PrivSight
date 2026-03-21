@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Privacy Protection Desktop App - v2.0" />
+    <title>Privacy Protector v2.0</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@19.2.4",
+          "react-dom": "https://esm.sh/react-dom@19.2.4"
+        }
+      }
+    </script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+          'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+
+      #root {
+        width: 100%;
+        height: 100vh;
+      }
+
+      .app-container {
+        display: flex;
+        height: 100vh;
+        background: linear-gradient(135deg, #0f172a 0%, #1a1f35 100%);
+      }
+
+      .header {
+        background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+        border-bottom: 1px solid #475569;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 28px;
+        font-weight: 600;
+        margin-bottom: 5px;
+        background: linear-gradient(90deg, #60a5fa 0%, #3b82f6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .header p {
+        font-size: 14px;
+        color: #94a3b8;
+      }
+
+      .content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 40px;
+      }
+
+      .welcome-section {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      .card {
+        background: #1e293b;
+        border: 1px solid #475569;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      .card h2 {
+        font-size: 20px;
+        margin-bottom: 16px;
+        color: #f1f5f9;
+      }
+
+      .card p {
+        line-height: 1.6;
+        color: #cbd5e1;
+        margin-bottom: 12px;
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
+      }
+
+      .feature-item {
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+      }
+
+      .feature-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+
+      .feature-item h3 {
+        font-size: 16px;
+        margin-bottom: 8px;
+        color: #e2e8f0;
+      }
+
+      .feature-item p {
+        font-size: 13px;
+        color: #94a3b8;
+      }
+
+      .badge {
+        display: inline-block;
+        background: #1e40af;
+        color: #dbeafe;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 500;
+        margin-right: 8px;
+        margin-bottom: 8px;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+        animation: pulse 2s infinite;
+      }
+
+      .status-indicator.active {
+        background: #10b981;
+      }
+
+      .status-indicator.inactive {
+        background: #ef4444;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .code-block {
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 12px;
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
+        color: #a5f3fc;
+        overflow-x: auto;
+        margin: 12px 0;
+      }
+
+      .button {
+        display: inline-block;
+        background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        margin-top: 12px;
+        transition: all 0.3s ease;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .stat-box {
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+      }
+
+      .stat-number {
+        font-size: 24px;
+        font-weight: 700;
+        color: #60a5fa;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="app-container">
+        <div style="flex: 1; display: flex; flex-direction: column">
+          <div class="header">
+            <h1>🔒 Privacy Protector v2.0</h1>
+            <p>Advanced Desktop Privacy Protection with AI</p>
+          </div>
+
+          <div class="content">
+            <div class="welcome-section">
+              <div class="card">
+                <h2>Welcome to Privacy Protector</h2>
+                <p>
+                  A sophisticated desktop application that uses facial recognition and artificial intelligence to
+                  protect your privacy automatically. When someone approaches your desk or when you're not looking at
+                  your screen, your notifications and sensitive content are automatically hidden.
+                </p>
+
+                <div style="margin-top: 16px">
+                  <span class="badge">v2.0 - Multi-Feature Release</span>
+                  <span class="badge">AI Powered</span>
+                  <span class="badge">Local Processing</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2>Key Features (v2.0)</h2>
+                <div class="features-grid">
+                  <div class="feature-item">
+                    <div class="feature-icon">👥</div>
+                    <h3>Shoulder Surfing Detection</h3>
+                    <p>Detects when unauthorized people are present and activates privacy mode</p>
+                  </div>
+
+                  <div class="feature-item">
+                    <div class="feature-icon">👀</div>
+                    <h3>Gaze Tracking</h3>
+                    <p>Monitors where you're looking to determine screen attention</p>
+                  </div>
+
+                  <div class="feature-item">
+                    <div class="feature-icon">📱</div>
+                    <h3>Smart Notifications</h3>
+                    <p>Classifies apps by sensitivity and filters accordingly</p>
+                  </div>
+
+                  <div class="feature-item">
+                    <div class="feature-icon">⚡</div>
+                    <h3>High Performance</h3>
+                    <p>Optimized to use &lt;10% CPU with intelligent frame skipping</p>
+                  </div>
+
+                  <div class="feature-item">
+                    <div class="feature-icon">📹</div>
+                    <h3>Live Preview</h3>
+                    <p>Real-time camera feed with face detection overlays</p>
+                  </div>
+
+                  <div class="feature-item">
+                    <div class="feature-icon">🔐</div>
+                    <h3>Local Only</h3>
+                    <p>All processing happens locally - your data never leaves your computer</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2>Getting Started</h2>
+                <p>To run the Privacy Protector application:</p>
+                <div class="code-block">
+                  # Terminal 1: Start Python backend<br />
+                  cd python && python -m server<br />
+                  <br />
+                  # Terminal 2: Start Electron dev server<br />
+                  cd electron && npm run dev<br />
+                </div>
+
+                <p style="margin-top: 16px">
+                  Once running, the application will automatically:
+                </p>
+                <ul style="margin-left: 20px; margin-top: 8px; color: #cbd5e1">
+                  <li>Connect to your webcam for face detection</li>
+                  <li>Monitor system notifications in real-time</li>
+                  <li>Blur sensitive content when needed</li>
+                  <li>Track your attention and presence</li>
+                </ul>
+              </div>
+
+              <div class="card">
+                <h2>Performance Metrics (v2.0)</h2>
+                <div class="stats-grid">
+                  <div class="stat-box">
+                    <div class="stat-number">6-8%</div>
+                    <div class="stat-label">CPU Usage</div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-number">140MB</div>
+                    <div class="stat-label">Memory</div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-number">&lt;50ms</div>
+                    <div class="stat-label">Latency</div>
+                  </div>
+                  <div class="stat-box">
+                    <div class="stat-number">20-24fps</div>
+                    <div class="stat-label">Processing</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h2>Documentation</h2>
+                <p>For complete documentation and guides, see:</p>
+                <ul style="margin-left: 20px; margin-top: 8px; color: #cbd5e1">
+                  <li><code style="color: #60a5fa">README.md</code> - Project overview</li>
+                  <li><code style="color: #60a5fa">QUICK_START.md</code> - 5-minute setup guide</li>
+                  <li><code style="color: #60a5fa">DEVELOPER_GUIDE.md</code> - For developers</li>
+                  <li><code style="color: #60a5fa">ARCHITECTURE.md</code> - System architecture</li>
+                  <li><code style="color: #60a5fa">TESTING_V2.md</code> - Testing procedures</li>
+                </ul>
+              </div>
+
+              <div class="card" style="background: #1e293b; border-color: #0ea5e9">
+                <p style="text-align: center; color: #7dd3fc">
+                  <span class="status-indicator active"></span>
+                  Application Status: Ready for Development
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

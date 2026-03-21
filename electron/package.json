@@ -1,0 +1,54 @@
+{
+  "name": "privsight-electron",
+  "version": "2.0.0",
+  "description": "PRIVSIGHT v2.0 - Desktop app for privacy protection using facial recognition, attention detection, and notification classification. Created by Rachit.",
+  "main": "dist/main/index.js",
+  "preload": "dist/main/preload.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:main": "tsx watch --clear-screen=false src/main/index.ts",
+    "dev:renderer": "vite",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc src/main/*.ts --outDir dist/main --declaration",
+    "build:renderer": "vite build",
+    "start": "electron dist/main/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electron/remote": "^2.1.2",
+    "electron-is-dev": "^2.0.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/electron": "^1.6.10",
+    "@types/node": "^20.10.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^27.2.0",
+    "electron-builder": "^24.6.4",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8",
+    "tsx": "^4.7.0"
+  },
+  "build": {
+    "appId": "com.privacy-app.desktop",
+    "productName": "Privacy Protector",
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "mac": {
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    }
+  }
+}

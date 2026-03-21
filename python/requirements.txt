@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+websockets
+opencv-python-headless
+numpy
+python-multipart
+mediapipe
+face-recognition
+dlib
+psutil

@@ -1,0 +1,27 @@
+{
+  "appId": "com.privsight.app",
+  "productName": "PrivSight AI",
+  "directories": {
+    "output": "release",
+    "buildResources": "build"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/dist/**/*",
+    "python/**/*",
+    "scripts/**/*"
+  ],
+  "mac": {
+    "target": ["dmg", "zip"],
+    "category": "public.app-category.productivity",
+    "icon": "build/icon.icns"
+  },
+  "win": {
+    "target": ["nsis", "zip"],
+    "icon": "build/icon.ico"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Utility"
+  }
+}
