@@ -4,13 +4,25 @@ Face embeddings management - generation, storage, and comparison.
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-import cv2
 import face_recognition
 import numpy as np
 from database import DatabaseManager
+
+# cv2 is only imported lazily when needed (not on startup),
+# to avoid libxcb errors in headless cloud environments.
+cv2 = None
+
+def _get_cv2():
+    """Lazily load cv2 to avoid GUI library crashes on startup in cloud."""
+    global cv2
+    if cv2 is None:
+        import cv2 as _cv2
+        cv2 = _cv2
+    return cv2
 
 logger = logging.getLogger(__name__)
 

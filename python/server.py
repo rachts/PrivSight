@@ -22,8 +22,26 @@ from performance_monitor import PerformanceMonitor
 from frame_buffer import FrameBuffer
 from notification_monitor import NotificationMonitor
 import base64
-import cv2
-import numpy as np
+# cv2 and numpy are loaded lazily on first use, not on startup.
+# This prevents "libxcb.so.1: cannot open shared object file" errors
+# in headless Railway/Docker cloud environments.
+_cv2 = None
+_np = None
+
+def _get_cv2():
+    global _cv2
+    if _cv2 is None:
+        import cv2 as _c
+        _cv2 = _c
+    return _cv2
+
+def _get_np():
+    global _np
+    if _np is None:
+        import numpy as __np
+        _np = __np
+    return _np
+
 from webcam_handler import WebcamHandler, RemoteFrameHandler
 
 # Configure logging
@@ -181,6 +199,8 @@ async def handle_message(websocket: WebSocketServerProtocol, data: dict):
                     frame_data = frame_data.split(',')[1]
                 
                 img_bytes = base64.b64decode(frame_data)
+                np = _get_np()
+                cv2 = _get_cv2()
                 nparr = np.frombuffer(img_bytes, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 
