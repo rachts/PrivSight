@@ -29,8 +29,9 @@ The Next.js frontend provides the dashboard and captures the webcam stream.
     - `NEXT_PUBLIC_WS_URL`: The WebSocket URL from Step 1 (e.g., `wss://privsight-backend.up.railway.app/ws`).
 3.  **Build Settings**:
     - Framework Preset: `Next.js`
-    - Root Directory: `./` (or `app/` depending on your repo structure, but usually the project root).
-4.  **Deploy**: Click deploy.
+    - Install Command: `npm install`
+    - Root Directory: `./` (project root).
+4.  **Deploy**: Click deploy. Vercel will pick up your `package-lock.json` automatically.
 
 ## 3. How it Works (Web Mode)
 - **Persistent Storage**: Facial data (embeddings) are stored in your **MongoDB** database. This ensures that even if the backend service restarts or is redeployed, your registered faces are never lost.
