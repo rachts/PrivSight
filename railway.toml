@@ -1,2 +1,6 @@
 [build]
+<<<<<<< HEAD
 nixpacks.pkgs = ["libxcb", "libxkbcommon", "libGL"]
+=======
+aptPackages = ["libxcb1", "libxkbcommon0", "libgl1-mesa-glx"]
+>>>>>>> 386da0ea634b2ed748598519f350e5f1cfa21722
