@@ -1,7 +1,16 @@
 import os
 import logging
 from typing import Optional, List, Dict, Any
-import numpy as np
+
+# Lazy loading for numpy to prevent potential issues in headless environments.
+_np = None
+
+def _get_np():
+    global _np
+    if _np is None:
+        import numpy as __np
+        _np = __np
+    return _np
 
 # Lazy import pymongo to allow local execution without the library if URI missing
 try:

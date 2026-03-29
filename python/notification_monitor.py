@@ -5,12 +5,28 @@ Notification monitoring and presence detection logic.
 import logging
 from typing import Dict, Any, Optional
 
-import cv2
-import numpy as np
-
 from face_embeddings import FaceEmbeddingsManager
 
 logger = logging.getLogger(__name__)
+
+# Lazy loading for computer vision libraries to prevent crashes on startup
+# in headless environments without X11/GUI libraries.
+_cv2 = None
+_np = None
+
+def _get_cv2():
+    global _cv2
+    if _cv2 is None:
+        import cv2 as __cv2
+        _cv2 = __cv2
+    return _cv2
+
+def _get_np():
+    global _np
+    if _np is None:
+        import numpy as __np
+        _np = __np
+    return _np
 
 
 class NotificationMonitor:
@@ -33,13 +49,20 @@ class NotificationMonitor:
         self.embeddings_manager = embeddings_manager
         self.sensitivity = sensitivity
         self.min_face_size = min_face_size
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
+        self.face_cascade = None  # Lazily initialized in detect_presence
 
         logger.info(f"[Monitor] Initialized with sensitivity: {sensitivity:.2f}")
 
-    def detect_presence(self, frame: np.ndarray) -> Dict[str, Any]:
+    def _get_cascade(self):
+        """Lazily initialize face cascade."""
+        if self.face_cascade is None:
+            cv2 = _get_cv2()
+            self.face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+        return self.face_cascade
+
+    def detect_presence(self, frame: Any) -> Dict[str, Any]:
         """
         Detect presence and recognized faces in frame.
 
@@ -59,12 +82,15 @@ class NotificationMonitor:
         }
 
         try:
+            cv2 = _get_cv2()
+            cascade = self._get_cascade()
+            
             # Convert to grayscale for face detection
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             gray_eq = cv2.equalizeHist(gray)
 
             # Detect faces using Haar Cascade
-            faces = self.face_cascade.detectMultiScale(
+            faces = cascade.detectMultiScale(
                 gray_eq,
                 scaleFactor=1.1,
                 minNeighbors=5,
