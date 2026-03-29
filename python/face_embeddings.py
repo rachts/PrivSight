@@ -8,16 +8,32 @@ import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-import face_recognition
-import numpy as np
 from database import DatabaseManager
 
-# cv2 is only imported lazily when needed (not on startup),
-# to avoid libxcb errors in headless cloud environments.
+# All heavy computer vision libraries are imported lazily on first use.
+# face_recognition → dlib → libX11.so.6 causes crashes on startup
+# in headless Railway/cloud containers without X11 display libraries.
+face_recognition = None
+np = None
 cv2 = None
 
+def _get_face_recognition():
+    """Lazily load face_recognition (and transitively dlib) to avoid libX11 crash."""
+    global face_recognition
+    if face_recognition is None:
+        import face_recognition as _fr
+        face_recognition = _fr
+    return face_recognition
+
+def _get_np():
+    global np
+    if np is None:
+        import numpy as _np
+        np = _np
+    return np
+
 def _get_cv2():
-    """Lazily load cv2 to avoid GUI library crashes on startup in cloud."""
+    """Lazily load cv2 to avoid libxcb errors in headless cloud environments."""
     global cv2
     if cv2 is None:
         import cv2 as _cv2
@@ -100,7 +116,7 @@ class FaceEmbeddingsManager:
 
     def register_face(
         self,
-        frames: List[np.ndarray],
+        frames,
         name: str = "User"
     ) -> str:
         """
@@ -113,14 +129,16 @@ class FaceEmbeddingsManager:
         Returns:
             Embedding ID
         """
+        fr = _get_face_recognition()
+        np_lib = _get_np()
         logger.info(f"[Register] Registering face for '{name}' with {len(frames)} frames")
 
         embeddings_list = []
         for i, frame in enumerate(frames):
             try:
                 # Detect face locations and encodings
-                face_locations = face_recognition.face_locations(frame)
-                face_encodings = face_recognition.face_encodings(frame, face_locations)
+                face_locations = fr.face_locations(frame)
+                face_encodings = fr.face_encodings(frame, face_locations)
 
                 if face_encodings:
                     # Use the first detected face
@@ -137,14 +155,14 @@ class FaceEmbeddingsManager:
             raise ValueError("No faces detected in provided frames")
 
         # Average embeddings for more robust recognition
-        avg_embedding = np.mean(embeddings_list, axis=0).tolist()
+        avg_embedding = np_lib.mean(embeddings_list, axis=0).tolist()
 
         # Generate unique ID and store
         face_id = f"face_{len(self.embeddings) + 1}"
         self.embeddings[face_id] = {
             'name': name,
             'embedding': avg_embedding,
-            'registered_at': int(np.datetime64('now').astype(int) / 1e6),
+            'registered_at': int(np_lib.datetime64('now').astype(int) / 1e6),
             'num_samples': len(embeddings_list),
         }
 
@@ -154,7 +172,7 @@ class FaceEmbeddingsManager:
 
     def recognize_face(
         self,
-        frame: np.ndarray,
+        frame,
         tolerance: float = 0.6
     ) -> tuple[bool, Optional[str], float]:
         """
@@ -167,10 +185,12 @@ class FaceEmbeddingsManager:
         Returns:
             Tuple of (is_registered, face_id/None, confidence)
         """
+        fr = _get_face_recognition()
+        np_lib = _get_np()
         try:
             # Detect faces in frame
-            face_locations = face_recognition.face_locations(frame)
-            face_encodings = face_recognition.face_encodings(frame, face_locations)
+            face_locations = fr.face_locations(frame)
+            face_encodings = fr.face_encodings(frame, face_locations)
 
             if not face_encodings:
                 return False, None, 0.0
@@ -183,8 +203,8 @@ class FaceEmbeddingsManager:
                 best_confidence = 0.0
 
                 for face_id, face_data in self.embeddings.items():
-                    stored_embedding = np.array(face_data['embedding'])
-                    distance = face_recognition.face_distance(
+                    stored_embedding = np_lib.array(face_data['embedding'])
+                    distance = fr.face_distance(
                         [stored_embedding],
                         encoding
                     )[0]

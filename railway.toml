@@ -1,2 +1,2 @@
 [build]
-aptPackages = ["libxcb1", "libxkbcommon0", "libgl1-mesa-glx"]
+aptPackages = ["libxcb1", "libxkbcommon0", "libgl1-mesa-glx", "libx11-6", "libglib2.0-0"]
