@@ -2,6 +2,7 @@
 Notification monitoring and presence detection logic.
 """
 
+from __future__ import annotations
 import logging
 from typing import Dict, Any, Optional
 

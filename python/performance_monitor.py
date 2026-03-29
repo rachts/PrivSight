@@ -3,6 +3,7 @@ Performance monitoring and optimization.
 Tracks CPU usage, memory, and frame processing metrics.
 """
 
+from __future__ import annotations
 import logging
 import psutil
 import time

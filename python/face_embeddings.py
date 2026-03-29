@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Face embeddings management - generation, storage, and comparison.
 """

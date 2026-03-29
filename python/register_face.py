@@ -10,6 +10,8 @@ Example:
     python register_face.py "John Doe"
 """
 
+from __future__ import annotations
+import asyncio
 import sys
 import os
 from pathlib import Path

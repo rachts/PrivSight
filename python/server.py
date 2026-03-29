@@ -3,6 +3,7 @@ Main WebSocket server for face recognition service.
 Communicates with Electron app via WebSocket protocol.
 """
 
+from __future__ import annotations
 import asyncio
 import json
 import logging
