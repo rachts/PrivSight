@@ -6,7 +6,8 @@ import { usePrivSightSocket } from '@/hooks/usePrivSightSocket';
 export default function WebcamPreview() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { presenceData } = usePrivSightSocket();
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const { presenceData, sendFrame, isConnected } = usePrivSightSocket();
   const [streamActive, setStreamActive] = useState(false);
 
   useEffect(() => {
@@ -32,6 +33,31 @@ export default function WebcamPreview() {
     };
   }, []);
 
+  // Frame streaming loop for cloud processing
+  useEffect(() => {
+    if (!streamActive || !isConnected || !videoRef.current) return;
+
+    // Create offscreen canvas for frame capture if it doesn't exist
+    if (!offscreenCanvasRef.current) {
+      offscreenCanvasRef.current = document.createElement('canvas');
+      offscreenCanvasRef.current.width = 320; // Lower res for faster upload
+      offscreenCanvasRef.current.height = 240;
+    }
+
+    const captureInterval = setInterval(() => {
+      if (videoRef.current && offscreenCanvasRef.current) {
+        const ctx = offscreenCanvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, 320, 240);
+          const frameData = offscreenCanvasRef.current.toDataURL('image/jpeg', 0.7);
+          sendFrame(frameData);
+        }
+      }
+    }, 150); // ~7 FPS (balanced for latency vs performance)
+
+    return () => clearInterval(captureInterval);
+  }, [streamActive, isConnected, sendFrame]);
+
   useEffect(() => {
     // Draw face bounding boxes over the WebRTC stream
     if (!canvasRef.current || !videoRef.current || !streamActive) return;
@@ -48,8 +74,9 @@ export default function WebcamPreview() {
 
     if (presenceData && presenceData.faces && presenceData.faces.length > 0) {
       // The Python backend is scaling frames. Default webcam handler frame size is usually 640x480.
-      const scaleX = canvas.width / 640;
-      const scaleY = canvas.height / 480;
+      // But we are sending 320x240 frames now.
+      const scaleX = canvas.width / 320;
+      const scaleY = canvas.height / 240;
 
       presenceData.faces.forEach((face) => {
         const { x, y, width, height } = face.position;
@@ -111,7 +138,7 @@ export default function WebcamPreview() {
         muted
         playsInline
         className="w-full h-full object-cover"
-        style={{ transform: 'scaleX(-1)' }} // Mirror effect - Note: bounding boxes will need mirror math if applied perfectly, but for this demo standard overlay without mirror might be easier if python doesn't mirror
+        style={{ transform: 'scaleX(-1)' }} // Mirror effect
       />
       <canvas
         ref={canvasRef}

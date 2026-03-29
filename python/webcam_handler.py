@@ -165,3 +165,88 @@ class MockWebcamHandler(WebcamHandler):
         """Release mock resources."""
         self.running = False
         logger.info("[Webcam] Mock webcam released")
+
+
+class RemoteFrameHandler:
+    """Handle frames received over WebSocket for cloud deployment."""
+
+    def __init__(self, target_size: tuple = (320, 240)):
+        """
+        Initialize remote frame handler.
+
+        Args:
+            target_size: Resize frames to this size for faster processing
+        """
+        self.target_size = target_size
+        self.current_frame: Optional[np.ndarray] = None
+        self.frame_lock = Lock()
+        self.frame_count = 0
+        self.running = True
+        logger.info("[Webcam] Remote frame handler initialized")
+
+    def set_frame(self, frame: np.ndarray) -> None:
+        """
+        Set the current frame (received from WebSocket).
+        
+        Args:
+            frame: Numpy array in RGB format
+        """
+        with self.frame_lock:
+            self.current_frame = frame
+            self.frame_count += 1
+
+    def get_frame(self) -> Optional[np.ndarray]:
+        """
+        Get current frame, resized for processing.
+
+        Returns:
+            Resized frame or None if unavailable
+        """
+        with self.frame_lock:
+            if self.current_frame is None:
+                return None
+
+            # Resize for faster processing
+            resized = cv2.resize(self.current_frame, self.target_size)
+            return resized # Already RGB from client
+
+    def get_frame_raw(self) -> Optional[np.ndarray]:
+        """Get current frame without resizing."""
+        with self.frame_lock:
+            return self.current_frame
+
+    async def capture_frames(self, num_frames: int = 5) -> List[np.ndarray]:
+        """
+        Capture N frames (waits for new frames to arrive).
+
+        Args:
+            num_frames: Number of frames to capture
+
+        Returns:
+            List of captured frames in RGB format
+        """
+        captured = []
+        last_count = self.frame_count
+        
+        timeout = 10 # 10 seconds timeout
+        start_time = asyncio.get_event_loop().time()
+
+        while len(captured) < num_frames and self.running:
+            if self.frame_count > last_count:
+                frame = self.get_frame_raw()
+                if frame is not None:
+                    captured.append(frame)
+                    last_count = self.frame_count
+            
+            if asyncio.get_event_loop().time() - start_time > timeout:
+                logger.warning("[Webcam] Timeout waiting for remote frames")
+                break
+                
+            await asyncio.sleep(0.1)
+            
+        return captured
+
+    def release(self) -> None:
+        """Release resources."""
+        self.running = False
+        logger.info("[Webcam] Remote frame handler released")

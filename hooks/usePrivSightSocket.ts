@@ -40,10 +40,12 @@ export interface PresenceUpdate {
   framePreview?: string;
 }
 
-export function usePrivSightSocket(url: string = 'ws://localhost:8765') {
+export function usePrivSightSocket(defaultUrl: string = 'ws://localhost:8765') {
   const [presenceData, setPresenceData] = useState<PresenceUpdate | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
   const [socket, setSocket] = useState<WebSocket | null>(null);
+
+  const url = process.env.NEXT_PUBLIC_WS_URL || defaultUrl;
 
   useEffect(() => {
     if (typeof window === 'undefined') return; // Prevent SSR WebSocket errors
@@ -67,14 +69,18 @@ export function usePrivSightSocket(url: string = 'ws://localhost:8765') {
           
           ws.send(JSON.stringify({
             type: 'init',
-            payload: { enableLivePreview: true, previewFrameRate: 15 }
+            payload: { 
+              enableLivePreview: true, 
+              previewFrameRate: 15,
+              useRemoteFrame: url.includes('localhost') ? false : true // Auto-enable remote frames for non-local builds
+            }
           }));
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            if (['privacy_mode_active', 'face_detected', 'unknown_user', 'no_face'].includes(data.type)) {
+            if (['privacy_mode_active', 'face_detected', 'unknown_user', 'no_face', 'multiple_faces', 'unknown_detected'].includes(data.type)) {
               setPresenceData(data.payload);
             } else if (data.type === 'fps_update') {
               setPresenceData(prev => prev ? { 
@@ -129,10 +135,25 @@ export function usePrivSightSocket(url: string = 'ws://localhost:8765') {
   }, [url]);
 
   const sendCommand = useCallback((type: string, payload: any) => {
-    if (socket && connectionStatus === 'connected') {
+    if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type, payload }));
     }
-  }, [socket, connectionStatus]);
+  }, [socket]);
 
-  return { presenceData, connectionStatus, isConnected: connectionStatus === 'connected', sendCommand };
+  const sendFrame = useCallback((base64Frame: string) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ 
+        type: 'process_frame', 
+        payload: { frame: base64Frame } 
+      }));
+    }
+  }, [socket]);
+
+  return { 
+    presenceData, 
+    connectionStatus, 
+    isConnected: connectionStatus === 'connected', 
+    sendCommand,
+    sendFrame
+  };
 }

@@ -1,36 +1,79 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import uvicorn
 import asyncio
 import logging
+import json
+import os
+from datetime import datetime
 
-# We import the existing PrivSight server components so they could theoretically be run, 
-# although Railway deployment lacks a physical webcam (cv2.VideoCapture(0) will fail).
-# We catch exceptions to ensure Railway doesn't crash on boot.
-try:
-    from server import monitoring_loop
-except ImportError:
-    pass
+# Import core server logic and state
+from server import state, handle_message, handle_init, monitoring_loop
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("PrivSightCloud")
+
+app = FastAPI(title="PrivSight Cloud Backend")
 
 @app.get("/")
 def home():
-    return {"status": "PrivSight backend running"}
+    return {
+        "status": "PrivSight backend running",
+        "mode": "cloud",
+        "initialized": state.webcam is not None,
+        "clients_active": len(state.clients)
+    }
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
-    # Send an initial connect message mirroring the local WS behavior
-    await websocket.send_json({"type": "presence_update", "payload": {"status": "user_detected"}})
+    # Wrap FastAPI websocket to look like websockets.server.WebSocketServerProtocol
+    # sufficiently for our state.clients set and handle_message logic.
+    # Note: server.py expects websockets.WebSocketServerProtocol but we can adapt.
     
+    class WSWrapper:
+        def __init__(self, ws: WebSocket):
+            self.ws = ws
+            self.remote_address = ("cloud_client", 0)
+        async def send(self, message: str):
+            await self.ws.send_text(message)
+        async def close(self):
+            await self.ws.close()
+
+    wrapper = WSWrapper(websocket)
+    state.clients.add(wrapper)
+    logger.info(f"Cloud client connected. Total clients: {len(state.clients)}")
+
     try:
+        # Initial status broadcast
+        await wrapper.send(json.dumps({
+            'type': 'presence_update',
+            'payload': {'status': 'connecting', 'message': 'Cloud bridge active'}
+        }))
+
         while True:
-            # We fulfill the prompt's request
-            await websocket.send_text("connected")
-            await asyncio.sleep(5)
+            try:
+                # Receive message from client
+                message = await websocket.receive_text()
+                data = json.loads(message)
+                
+                # Use server.py handlers
+                await handle_message(wrapper, data)
+                
+            except json.JSONDecodeError:
+                await wrapper.send(json.dumps({'type': 'error', 'payload': {'message': 'Invalid JSON'}}))
+            except Exception as e:
+                logger.error(f"Error handling cloud message: {e}")
+                
+    except WebSocketDisconnect:
+        logger.info("Cloud client disconnected")
     except Exception as e:
-        print(f"WebSocket disconnected: {e}")
+        logger.error(f"WebSocket error: {e}")
+    finally:
+        state.clients.discard(wrapper)
+        logger.info(f"Client removed. Total clients: {len(state.clients)}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    # Ensure monitoring loop starts if not already running (initialized by 'init' message)
+    uvicorn.run(app, host="0.0.0.0", port=port)

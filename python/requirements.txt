@@ -8,3 +8,4 @@ mediapipe
 face-recognition
 dlib
 psutil
+pymongo[srv]

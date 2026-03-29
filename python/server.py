@@ -15,13 +15,16 @@ import websockets
 from websockets.server import WebSocketServerProtocol
 
 from face_embeddings import FaceEmbeddingsManager
-from webcam_handler import WebcamHandler
-from notification_monitor import NotificationMonitor
 from multi_face_processor import MultiFaceProcessor
 from attention_detector import AttentionDetector
 from notification_classifier import NotificationClassifier
 from performance_monitor import PerformanceMonitor
 from frame_buffer import FrameBuffer
+from notification_monitor import NotificationMonitor
+import base64
+import cv2
+import numpy as np
+from webcam_handler import WebcamHandler, RemoteFrameHandler
 
 # Configure logging
 logging.basicConfig(
@@ -168,6 +171,26 @@ async def handle_message(websocket: WebSocketServerProtocol, data: dict):
         state.config['enableLivePreview'] = enable
         logger.info(f"[Handler] Live preview {'enabled' if enable else 'disabled'}")
 
+    elif msg_type == 'process_frame':
+        # Received a frame from the web client
+        if isinstance(state.webcam, RemoteFrameHandler):
+            try:
+                # payload['frame'] is a base64 string: "data:image/jpeg;base64,..."
+                frame_data = payload.get('frame', '')
+                if ',' in frame_data:
+                    frame_data = frame_data.split(',')[1]
+                
+                img_bytes = base64.b64decode(frame_data)
+                nparr = np.frombuffer(img_bytes, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if frame is not None:
+                    # Convert BGR (OpenCV default) to RGB
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    state.webcam.set_frame(frame_rgb)
+            except Exception as e:
+                logger.error(f"[Handler] Error decoding remote frame: {e}")
+
     else:
         logger.warning(f"[Handler] Unknown message type: {msg_type}")
 
@@ -183,12 +206,25 @@ async def handle_init(websocket: WebSocketServerProtocol, config: dict):
     state.embeddings_manager = FaceEmbeddingsManager(str(embeddings_path))
     logger.info(f"[Init] Face embeddings manager initialized at {embeddings_path}")
 
-    # Initialize webcam handler
-    state.webcam = WebcamHandler(
-        frame_skip=max(1, int(1000 / state.config.get('updateFrequency', 200))),
-        target_size=(320, 240)
-    )
-    logger.info("[Init] Webcam handler initialized")
+    # Initialize webcam handler (Try local first, fallback to remote if it fails or if cloud mode)
+    is_cloud = os.getenv('PRIVSIGHT_CLOUD', 'false').lower() == 'true' or config.get('useRemoteFrame', False)
+    
+    if not is_cloud:
+        try:
+            state.webcam = WebcamHandler(
+                frame_skip=max(1, int(1000 / state.config.get('updateFrequency', 200))),
+                target_size=(320, 240)
+            )
+            if state.webcam.cap is None or not state.webcam.cap.isOpened():
+                 raise Exception("Local camera not found")
+            logger.info("[Init] Local webcam handler initialized")
+        except Exception as e:
+            logger.warning(f"[Init] Local camera failed, switching to remote mode: {e}")
+            is_cloud = True
+
+    if is_cloud:
+        state.webcam = RemoteFrameHandler(target_size=(320, 240))
+        logger.info("[Init] Remote frame handler initialized (Web Mode)")
 
     # Initialize notification monitor (legacy)
     state.monitor = NotificationMonitor(

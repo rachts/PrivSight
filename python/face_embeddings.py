@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 import cv2
 import face_recognition
 import numpy as np
+from database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -26,30 +27,64 @@ class FaceEmbeddingsManager:
         """
         self.embeddings_path = Path(embeddings_path)
         self.embeddings: Dict[str, Any] = {}
+        self.db = DatabaseManager()
         self.load_embeddings()
 
     def load_embeddings(self) -> None:
-        """Load embeddings from disk."""
+        """Load embeddings from database (primary) or disk (fallback)."""
+        if self.db.is_available():
+            self.embeddings = self.db.get_all_faces()
+            if self.embeddings:
+                logger.info(f"[Embeddings] Loaded {len(self.embeddings)} registered faces from MongoDB")
+                return
+            else:
+                logger.info("[Embeddings] MongoDB is empty, checking for local migration...")
+
+        # Fallback to local file / Migration logic
         if self.embeddings_path.exists():
             try:
                 with open(self.embeddings_path, 'r') as f:
-                    self.embeddings = json.load(f)
-                logger.info(f"[Embeddings] Loaded {len(self.embeddings)} registered faces")
+                    local_data = json.load(f)
+                
+                if local_data:
+                    self.embeddings = local_data
+                    logger.info(f"[Embeddings] Loaded {len(self.embeddings)} registered faces from local JSON")
+                    
+                    # Migration: If DB is available but was empty, sync local data to DB
+                    if self.db.is_available():
+                        logger.info("[Embeddings] Migrating local data to MongoDB...")
+                        for fid, data in self.embeddings.items():
+                            # Ensure numpy types are converted (already should be lists in JSON)
+                            self.db.upsert_face(fid, data)
+                else:
+                    self.embeddings = {}
             except Exception as e:
-                logger.error(f"[Embeddings] Error loading embeddings: {e}")
+                logger.error(f"[Embeddings] Error loading local embeddings: {e}")
                 self.embeddings = {}
         else:
-            logger.info("[Embeddings] No existing embeddings file found")
+            logger.info("[Embeddings] No existing embeddings found in DB or local file")
 
-    def save_embeddings(self) -> None:
-        """Save embeddings to disk."""
+    def save_embeddings(self, face_id: Optional[str] = None) -> None:
+        """
+        Save embeddings to database and/or disk.
+        
+        Args:
+            face_id: Optional ID to specifically sync to database
+        """
+        # Save specific change to DB if available
+        if self.db.is_available() and face_id:
+            data = self.embeddings.get(face_id)
+            if data:
+                self.db.upsert_face(face_id, data)
+        
+        # Always mirror to local disk for redundancy/offline support
         try:
             self.embeddings_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.embeddings_path, 'w') as f:
                 json.dump(self.embeddings, f, indent=2)
-            logger.info(f"[Embeddings] Saved embeddings to {self.embeddings_path}")
+            logger.debug(f"[Embeddings] Synced embeddings to {self.embeddings_path}")
         except Exception as e:
-            logger.error(f"[Embeddings] Error saving embeddings: {e}")
+            logger.error(f"[Embeddings] Error syncing embeddings to disk: {e}")
 
     def register_face(
         self,
@@ -101,7 +136,7 @@ class FaceEmbeddingsManager:
             'num_samples': len(embeddings_list),
         }
 
-        self.save_embeddings()
+        self.save_embeddings(face_id)
         logger.info(f"[Register] Face registered successfully with ID: {face_id}")
         return face_id
 
@@ -181,6 +216,10 @@ class FaceEmbeddingsManager:
         """Delete a registered face."""
         if face_id in self.embeddings:
             del self.embeddings[face_id]
+            # Delete from DB
+            if self.db.is_available():
+                self.db.delete_face(face_id)
+            # Sync to disk
             self.save_embeddings()
             logger.info(f"[Embeddings] Deleted face: {face_id}")
             return True
@@ -189,5 +228,9 @@ class FaceEmbeddingsManager:
     def clear_all(self) -> None:
         """Clear all registered faces."""
         self.embeddings.clear()
+        # Clear DB
+        if self.db.is_available():
+            self.db.clear_all()
+        # Sync to disk
         self.save_embeddings()
         logger.warning("[Embeddings] All registered faces cleared")
