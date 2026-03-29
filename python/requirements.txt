@@ -9,3 +9,4 @@ face-recognition
 dlib
 psutil
 pymongo[srv]
+python-dotenv
