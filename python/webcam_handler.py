@@ -1,16 +1,28 @@
-"""
-Webcam capture and frame handling with performance optimization.
-"""
-
 import asyncio
 import logging
-from typing import Optional, List
+from typing import Optional, List, Any
 from threading import Thread, Lock
 
-import cv2
-import numpy as np
-
 logger = logging.getLogger(__name__)
+
+# Lazy loading for computer vision libraries to prevent crashes on startup
+# in headless environments without X11/GUI libraries.
+cv2 = None
+np = None
+
+def _get_cv2():
+    global cv2
+    if cv2 is None:
+        import cv2 as _cv2
+        cv2 = _cv2
+    return cv2
+
+def _get_np():
+    global np
+    if np is None:
+        import numpy as _np
+        np = _np
+    return np
 
 
 class WebcamHandler:
@@ -30,7 +42,7 @@ class WebcamHandler:
         self.target_size = target_size
 
         self.cap = None
-        self.current_frame: Optional[np.ndarray] = None
+        self.current_frame: Optional[Any] = None
         self.frame_lock = Lock()
         self.running = False
         self.frame_count = 0
@@ -40,16 +52,17 @@ class WebcamHandler:
     def _init_camera(self) -> None:
         """Initialize camera capture."""
         try:
-            self.cap = cv2.VideoCapture(self.camera_index)
+            _cv2 = _get_cv2()
+            self.cap = _cv2.VideoCapture(self.camera_index)
             if not self.cap.isOpened():
                 logger.error("[Webcam] Failed to open camera")
                 return
 
             # Set camera properties
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            self.cap.set(cv2.CAP_PROP_FPS, 30)
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self.cap.set(_cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(_cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            self.cap.set(_cv2.CAP_PROP_FPS, 30)
+            self.cap.set(_cv2.CAP_PROP_BUFFERSIZE, 1)
 
             logger.info("[Webcam] Camera initialized successfully")
             self._start_capture_thread()
@@ -78,7 +91,7 @@ class WebcamHandler:
             except Exception as e:
                 logger.error(f"[Webcam] Error in capture loop: {e}")
 
-    def get_frame(self) -> Optional[np.ndarray]:
+    def get_frame(self) -> Optional[Any]:
         """
         Get current frame, resized for processing.
 
@@ -93,18 +106,20 @@ class WebcamHandler:
             if self.frame_count % self.frame_skip != 0:
                 return None
 
+            _cv2 = _get_cv2()
             # Resize for faster processing
-            resized = cv2.resize(self.current_frame, self.target_size)
-            return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            resized = _cv2.resize(self.current_frame, self.target_size)
+            return _cv2.cvtColor(resized, _cv2.COLOR_BGR2RGB)
 
-    def get_frame_raw(self) -> Optional[np.ndarray]:
+    def get_frame_raw(self) -> Optional[Any]:
         """Get current frame without resizing."""
         with self.frame_lock:
             if self.current_frame is None:
                 return None
-            return cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+            _cv2 = _get_cv2()
+            return _cv2.cvtColor(self.current_frame, _cv2.COLOR_BGR2RGB)
 
-    async def capture_frames(self, num_frames: int = 5) -> List[np.ndarray]:
+    async def capture_frames(self, num_frames: int = 5) -> List[Any]:
         """
         Capture N frames for face registration.
 
@@ -146,8 +161,9 @@ class MockWebcamHandler(WebcamHandler):
 
     def __init__(self, *args, **kwargs):
         """Initialize mock webcam with test frame."""
+        _np = _get_np()
         self.target_size = kwargs.get('target_size', (320, 240))
-        self.current_frame = np.random.randint(0, 256, (*self.target_size, 3), dtype=np.uint8)
+        self.current_frame = _np.random.randint(0, 256, (*self.target_size, 3), dtype=_np.uint8)
         self.frame_lock = Lock()
         self.running = True
         self.frame_count = 0
@@ -178,13 +194,13 @@ class RemoteFrameHandler:
             target_size: Resize frames to this size for faster processing
         """
         self.target_size = target_size
-        self.current_frame: Optional[np.ndarray] = None
+        self.current_frame: Optional[Any] = None
         self.frame_lock = Lock()
         self.frame_count = 0
         self.running = True
         logger.info("[Webcam] Remote frame handler initialized")
 
-    def set_frame(self, frame: np.ndarray) -> None:
+    def set_frame(self, frame: Any) -> None:
         """
         Set the current frame (received from WebSocket).
         
@@ -195,7 +211,7 @@ class RemoteFrameHandler:
             self.current_frame = frame
             self.frame_count += 1
 
-    def get_frame(self) -> Optional[np.ndarray]:
+    def get_frame(self) -> Optional[Any]:
         """
         Get current frame, resized for processing.
 
@@ -206,16 +222,17 @@ class RemoteFrameHandler:
             if self.current_frame is None:
                 return None
 
+            _cv2 = _get_cv2()
             # Resize for faster processing
-            resized = cv2.resize(self.current_frame, self.target_size)
+            resized = _cv2.resize(self.current_frame, self.target_size)
             return resized # Already RGB from client
 
-    def get_frame_raw(self) -> Optional[np.ndarray]:
+    def get_frame_raw(self) -> Optional[Any]:
         """Get current frame without resizing."""
         with self.frame_lock:
             return self.current_frame
 
-    async def capture_frames(self, num_frames: int = 5) -> List[np.ndarray]:
+    async def capture_frames(self, num_frames: int = 5) -> List[Any]:
         """
         Capture N frames (waits for new frames to arrive).
 

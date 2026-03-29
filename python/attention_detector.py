@@ -1,23 +1,40 @@
-"""
-Smart attention detection using MediaPipe Face Mesh.
-Detects if user is looking at the screen based on eye gaze and head pose.
-"""
-
 import logging
 from typing import Dict, Any, Optional, Tuple
 
-import cv2
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
-# Try to import MediaPipe - graceful fallback if not available
-try:
-    import mediapipe as mp
-    MEDIAPIPE_AVAILABLE = True
-except ImportError:
-    MEDIAPIPE_AVAILABLE = False
-    logger.warning("[Attention] MediaPipe not available - attention detection disabled")
+# Lazy loading for heavy CV libraries to prevent crashes in headless environments
+cv2 = None
+np = None
+mp = None
+
+def _get_cv2():
+    global cv2
+    if cv2 is None:
+        import cv2 as _cv2
+        cv2 = _cv2
+    return cv2
+
+def _get_np():
+    global np
+    if np is None:
+        import numpy as _np
+        np = _np
+    return np
+
+def _get_mp():
+    global mp
+    if mp is None:
+        try:
+            import mediapipe as _mp
+            mp = _mp
+        except ImportError:
+            logger.warning("[Attention] MediaPipe not available - attention detection disabled")
+            return None
+    return mp
+
+def is_mediapipe_available():
+    return _get_mp() is not None
 
 
 class AttentionDetector:
@@ -30,13 +47,14 @@ class AttentionDetector:
         Args:
             enable: Whether to enable attention detection
         """
-        self.enabled = enable and MEDIAPIPE_AVAILABLE
+        self.enabled = enable and is_mediapipe_available()
         self.face_mesh = None
         self.mp_drawing = None
 
         if self.enabled:
             try:
-                self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+                _mp = _get_mp()
+                self.face_mesh = _mp.solutions.face_mesh.FaceMesh(
                     static_image_mode=False,
                     max_num_faces=5,
                     refine_landmarks=True,
@@ -80,21 +98,22 @@ class AttentionDetector:
             LEFT_EYE_OUTER = 33
 
             attention_results = []
+            _np = _get_np()
             
             for f_idx, landmarks in enumerate(results.multi_face_landmarks):
                 # Extract key points (normalized 0-1)
-                left_eye_inner = np.array([landmarks.landmark[LEFT_EYE_INNER].x, landmarks.landmark[LEFT_EYE_INNER].y])
-                left_eye_outer = np.array([landmarks.landmark[LEFT_EYE_OUTER].x, landmarks.landmark[LEFT_EYE_OUTER].y])
-                right_eye_inner = np.array([landmarks.landmark[RIGHT_EYE_INNER].x, landmarks.landmark[RIGHT_EYE_INNER].y])
-                right_eye_outer = np.array([landmarks.landmark[RIGHT_EYE_OUTER].x, landmarks.landmark[RIGHT_EYE_OUTER].y])
+                left_eye_inner = _np.array([landmarks.landmark[LEFT_EYE_INNER].x, landmarks.landmark[LEFT_EYE_INNER].y])
+                left_eye_outer = _np.array([landmarks.landmark[LEFT_EYE_OUTER].x, landmarks.landmark[LEFT_EYE_OUTER].y])
+                right_eye_inner = _np.array([landmarks.landmark[RIGHT_EYE_INNER].x, landmarks.landmark[RIGHT_EYE_INNER].y])
+                right_eye_outer = _np.array([landmarks.landmark[RIGHT_EYE_OUTER].x, landmarks.landmark[RIGHT_EYE_OUTER].y])
 
                 # Calculate gaze direction
                 left_gaze_center = (left_eye_inner + left_eye_outer) / 2
                 right_gaze_center = (right_eye_inner + right_eye_outer) / 2
                 gaze_center = (left_gaze_center + right_gaze_center) / 2
 
-                gaze_x = np.clip((gaze_center[0] - 0.5) * 2, -1, 1)
-                gaze_y = np.clip((gaze_center[1] - 0.5) * 2, -1, 1)
+                gaze_x = _np.clip((gaze_center[0] - 0.5) * 2, -1, 1)
+                gaze_y = _np.clip((gaze_center[1] - 0.5) * 2, -1, 1)
 
                 head_rotation = self._estimate_head_pose(landmarks)
                 eyes_open, current_ear = self._detect_eyes_open(landmarks)
@@ -109,7 +128,7 @@ class AttentionDetector:
 
                 is_live = True
                 if len(self.liveness_history[f_idx]) >= 30:
-                    ear_variance = np.var(self.liveness_history[f_idx])
+                    ear_variance = _np.var(self.liveness_history[f_idx])
                     if ear_variance < 1e-5:
                         # Static image / spoof detected
                         is_live = False
@@ -123,8 +142,8 @@ class AttentionDetector:
                     'isLive': is_live,
                     'confidence': 0.8,
                     'box_hint_center': (
-                         (np.min([l.x for l in landmarks.landmark]) + np.max([l.x for l in landmarks.landmark])) / 2 * w,
-                         (np.min([l.y for l in landmarks.landmark]) + np.max([l.y for l in landmarks.landmark])) / 2 * h
+                         (_np.min([l.x for l in landmarks.landmark]) + _np.max([l.x for l in landmarks.landmark])) / 2 * w,
+                         (_np.min([l.y for l in landmarks.landmark]) + _np.max([l.y for l in landmarks.landmark])) / 2 * h
                     )
                 })
 
@@ -158,23 +177,24 @@ class AttentionDetector:
             RIGHT_SHOULDER = 12
 
             # Get 3D coordinates (MediaPipe includes z)
-            nose = np.array([landmarks.landmark[NOSE].x, landmarks.landmark[NOSE].y, landmarks.landmark[NOSE].z])
-            chin = np.array([landmarks.landmark[CHIN].x, landmarks.landmark[CHIN].y, landmarks.landmark[CHIN].z])
-            left_ear = np.array([landmarks.landmark[LEFT_EAR].x, landmarks.landmark[LEFT_EAR].y, landmarks.landmark[LEFT_EAR].z])
-            right_ear = np.array([landmarks.landmark[RIGHT_EAR].x, landmarks.landmark[RIGHT_EAR].y, landmarks.landmark[RIGHT_EAR].z])
+            _np = _get_np()
+            nose = _np.array([landmarks.landmark[NOSE].x, landmarks.landmark[NOSE].y, landmarks.landmark[NOSE].z])
+            chin = _np.array([landmarks.landmark[CHIN].x, landmarks.landmark[CHIN].y, landmarks.landmark[CHIN].z])
+            left_ear = _np.array([landmarks.landmark[LEFT_EAR].x, landmarks.landmark[LEFT_EAR].y, landmarks.landmark[LEFT_EAR].z])
+            right_ear = _np.array([landmarks.landmark[RIGHT_EAR].x, landmarks.landmark[RIGHT_EAR].y, landmarks.landmark[RIGHT_EAR].z])
 
             # Simple head pose estimation
             # Pitch: forward/backward tilt
             pitch = (chin[1] - nose[1]) * 90  # 90 degrees range
-            pitch = np.clip(pitch, -30, 30)
+            pitch = _np.clip(pitch, -30, 30)
 
             # Yaw: left/right turn
             yaw = (right_ear[0] - left_ear[0]) * 90
-            yaw = np.clip(yaw, -45, 45)
+            yaw = _np.clip(yaw, -45, 45)
 
             # Roll: head tilt
             roll = (right_ear[1] - left_ear[1]) * 90
-            roll = np.clip(roll, -30, 30)
+            roll = _np.clip(roll, -30, 30)
 
             return {
                 'x': float(pitch),  # pitch
@@ -208,23 +228,24 @@ class AttentionDetector:
             RIGHT_EYE_RIGHT = 362
 
             # Calculate eye aspect ratio (EAR)
-            left_vertical = np.linalg.norm(
-                np.array([landmarks.landmark[LEFT_EYE_UP].x, landmarks.landmark[LEFT_EYE_UP].y]) -
-                np.array([landmarks.landmark[LEFT_EYE_DOWN].x, landmarks.landmark[LEFT_EYE_DOWN].y])
+            _np = _get_np()
+            left_vertical = _np.linalg.norm(
+                _np.array([landmarks.landmark[LEFT_EYE_UP].x, landmarks.landmark[LEFT_EYE_UP].y]) -
+                _np.array([landmarks.landmark[LEFT_EYE_DOWN].x, landmarks.landmark[LEFT_EYE_DOWN].y])
             )
-            left_horizontal = np.linalg.norm(
-                np.array([landmarks.landmark[LEFT_EYE_LEFT].x, landmarks.landmark[LEFT_EYE_LEFT].y]) -
-                np.array([landmarks.landmark[LEFT_EYE_RIGHT].x, landmarks.landmark[LEFT_EYE_RIGHT].y])
+            left_horizontal = _np.linalg.norm(
+                _np.array([landmarks.landmark[LEFT_EYE_LEFT].x, landmarks.landmark[LEFT_EYE_LEFT].y]) -
+                _np.array([landmarks.landmark[LEFT_EYE_RIGHT].x, landmarks.landmark[LEFT_EYE_RIGHT].y])
             )
             left_ear = left_vertical / left_horizontal if left_horizontal > 0 else 0
 
-            right_vertical = np.linalg.norm(
-                np.array([landmarks.landmark[RIGHT_EYE_UP].x, landmarks.landmark[RIGHT_EYE_UP].y]) -
-                np.array([landmarks.landmark[RIGHT_EYE_DOWN].x, landmarks.landmark[RIGHT_EYE_DOWN].y])
+            right_vertical = _np.linalg.norm(
+                _np.array([landmarks.landmark[RIGHT_EYE_UP].x, landmarks.landmark[RIGHT_EYE_UP].y]) -
+                _np.array([landmarks.landmark[RIGHT_EYE_DOWN].x, landmarks.landmark[RIGHT_EYE_DOWN].y])
             )
-            right_horizontal = np.linalg.norm(
-                np.array([landmarks.landmark[RIGHT_EYE_LEFT].x, landmarks.landmark[RIGHT_EYE_LEFT].y]) -
-                np.array([landmarks.landmark[RIGHT_EYE_RIGHT].x, landmarks.landmark[RIGHT_EYE_RIGHT].y])
+            right_horizontal = _np.linalg.norm(
+                _np.array([landmarks.landmark[RIGHT_EYE_LEFT].x, landmarks.landmark[RIGHT_EYE_LEFT].y]) -
+                _np.array([landmarks.landmark[RIGHT_EYE_RIGHT].x, landmarks.landmark[RIGHT_EYE_RIGHT].y])
             )
             right_ear = right_vertical / right_horizontal if right_horizontal > 0 else 0
 

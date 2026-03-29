@@ -1,16 +1,28 @@
-"""
-Multi-face detection and identity clustering.
-Handles detection of multiple faces and determines if they are registered users.
-"""
-
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
-import cv2
-import numpy as np
 from face_embeddings import FaceEmbeddingsManager
 
 logger = logging.getLogger(__name__)
+
+# Lazy loading for computer vision libraries to prevent crashes on startup
+# in headless environments without X11/GUI libraries.
+cv2 = None
+np = None
+
+def _get_cv2():
+    global cv2
+    if cv2 is None:
+        import cv2 as _cv2
+        cv2 = _cv2
+    return cv2
+
+def _get_np():
+    global np
+    if np is None:
+        import numpy as _np
+        np = _np
+    return np
 
 
 class MultiFaceProcessor:
@@ -30,30 +42,33 @@ class MultiFaceProcessor:
             sensitivity: Detection sensitivity (0-1, higher = stricter)
             min_face_size: Minimum face size to consider valid (pixels)
         """
+        _cv2 = _get_cv2()
         self.embeddings_manager = embeddings_manager
         self.sensitivity = sensitivity
         self.min_face_size = min_face_size
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        self.face_cascade = _cv2.CascadeClassifier(
+            _cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
         logger.info(f"[MultiFace] Initialized with sensitivity: {sensitivity:.2f}")
 
-    def detect_faces(self, frame: np.ndarray) -> List[Dict[str, Any]]:
+    def detect_faces(self, frame: Any) -> List[Dict[str, Any]]:
         """
         Detect all faces in frame and identify them.
 
         Args:
-            frame: Image frame in RGB format
+            frame: Image frame in RGB format (numpy.ndarray)
 
         Returns:
             List of detected face dictionaries with position and identity
         """
+        _cv2 = _get_cv2()
         detected_faces = []
 
         try:
             # Convert to grayscale for face detection
-            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-            gray_eq = cv2.equalizeHist(gray)
+            _cv2 = _get_cv2()
+            gray = _cv2.cvtColor(frame, _cv2.COLOR_RGB2GRAY)
+            gray_eq = _cv2.equalizeHist(gray)
 
             # Detect faces using Haar Cascade
             faces = self.face_cascade.detectMultiScale(

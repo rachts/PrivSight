@@ -14,12 +14,10 @@ import sys
 import os
 from pathlib import Path
 
-import cv2
-from face_embeddings import FaceEmbeddingsManager
-from webcam_handler import WebcamHandler
-
-
 def main():
+    import cv2
+    from face_embeddings import FaceEmbeddingsManager
+    from webcam_handler import WebcamHandler
     if len(sys.argv) < 2:
         print("Usage: python register_face.py <name>")
         print("Example: python register_face.py 'John Doe'")

@@ -1,17 +1,28 @@
-"""
-Frame buffer and streaming for live camera preview.
-Handles frame compression and efficient transmission to Electron app.
-"""
-
 import base64
 import logging
 import time
-from typing import Optional, Tuple
-
-import cv2
-import numpy as np
+from typing import Optional, Tuple, Any
 
 logger = logging.getLogger(__name__)
+
+# Lazy loading for computer vision libraries to prevent crashes on startup
+# in headless environments without X11/GUI libraries.
+cv2 = None
+np = None
+
+def _get_cv2():
+    global cv2
+    if cv2 is None:
+        import cv2 as _cv2
+        cv2 = _cv2
+    return cv2
+
+def _get_np():
+    global np
+    if np is None:
+        import numpy as _np
+        np = _np
+    return np
 
 
 class FrameBuffer:
@@ -38,7 +49,7 @@ class FrameBuffer:
 
         self.last_frame_time = 0
         self.frame_count = 0
-        self.current_frame: Optional[np.ndarray] = None
+        self.current_frame: Optional[Any] = None
         self.frame_lock = True
 
         logger.info(
@@ -46,7 +57,7 @@ class FrameBuffer:
             f"quality {jpeg_quality}, max width {max_width}"
         )
 
-    def add_frame(self, frame: np.ndarray) -> bool:
+    def add_frame(self, frame: Any) -> bool:
         """
         Add a frame to the buffer.
 
@@ -83,6 +94,7 @@ class FrameBuffer:
         if self.current_frame is None:
             return None
 
+        _cv2 = _get_cv2()
         try:
             frame = self.current_frame.copy()
 
@@ -91,18 +103,18 @@ class FrameBuffer:
             if w > self.max_width:
                 scale = self.max_width / w
                 new_h = int(h * scale)
-                frame = cv2.resize(frame, (self.max_width, new_h))
+                frame = _cv2.resize(frame, (self.max_width, new_h))
                 w, h = frame.shape[1], frame.shape[0]
 
             # Convert RGB to BGR for OpenCV JPEG encoding
             if len(frame.shape) == 3 and frame.shape[2] == 3:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                frame = _cv2.cvtColor(frame, _cv2.COLOR_RGB2BGR)
 
             # Encode as JPEG
-            success, buffer = cv2.imencode(
+            success, buffer = _cv2.imencode(
                 '.jpg',
                 frame,
-                [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+                [_cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
             )
 
             if not success:
@@ -133,6 +145,7 @@ class FrameBuffer:
         if self.current_frame is None:
             return None
 
+        _cv2 = _get_cv2()
         try:
             frame = self.current_frame.copy()
 
@@ -149,7 +162,7 @@ class FrameBuffer:
                 color = (0, 255, 0) if is_registered else (0, 0, 255)
 
                 # Draw rectangle
-                cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+                _cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
 
                 # Draw label
                 label = (
@@ -157,11 +170,11 @@ class FrameBuffer:
                     if is_registered
                     else f"Unknown ({face.get('confidence', 0):.2f})"
                 )
-                cv2.putText(
+                _cv2.putText(
                     frame,
                     label,
                     (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
+                    _cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
                     color,
                     2
@@ -172,18 +185,18 @@ class FrameBuffer:
             if w_frame > self.max_width:
                 scale = self.max_width / w_frame
                 new_h = int(h_frame * scale)
-                frame = cv2.resize(frame, (self.max_width, new_h))
+                frame = _cv2.resize(frame, (self.max_width, new_h))
                 w_frame, h_frame = frame.shape[1], frame.shape[0]
 
             # Convert RGB to BGR for OpenCV JPEG encoding
             if len(frame.shape) == 3 and frame.shape[2] == 3:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                frame = _cv2.cvtColor(frame, _cv2.COLOR_RGB2BGR)
 
             # Encode as JPEG
-            success, buffer = cv2.imencode(
+            success, buffer = _cv2.imencode(
                 '.jpg',
                 frame,
-                [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+                [_cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
             )
 
             if not success:
